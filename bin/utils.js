@@ -25,13 +25,13 @@ const promptWithQuestions = () => {
 		.then(({ intro }) => {
 			switch (intro) {
 				case 'create app':
-					console.log('...building your new React application');
+					getAppName();
 					break;
 				case 'create component':
-					console.log('...building your new React component');
+					getComponentName();
 					break;
-				// default:
-				//   console.log(`what?`);
+				default:
+					console.log(`what?`);
 			  }
 		})
 		// .catch((error) => {
@@ -41,6 +41,30 @@ const promptWithQuestions = () => {
 			// Something else went wrong
 		// 	}
 		// });
+};
+
+const getAppName = () => {
+	return inquirer
+		.prompt({
+			type: 'input',
+			name: 'app_name',
+			message: 'What would you like to name your application?'
+		})
+		.then((answer)=> {
+			console.log(`...creating an application named ${answer.app_name}`);
+		});
+};
+
+const getComponentName = () => {
+	return inquirer
+		.prompt({
+			type: 'input',
+			name: 'component_name',
+			message: 'What is the name of the component?'
+		})
+		.then((answer)=> {
+			console.log(`...creating a component named ${answer.component_name}`);
+		});
 };
 
 module.exports = { showHelp, promptWithQuestions };
