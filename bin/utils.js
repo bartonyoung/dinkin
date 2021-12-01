@@ -1,8 +1,8 @@
 const inquirer = require('inquirer');
 const path = require('path');
-const fs = require('fs');
-const fsPromise = fs.promises;
-const packageJSONTemplate = require('./templates/package-template.json');
+const fs = require('fs').promises;
+const { exec } = require('child_process');
+const packageJsonTemplate = require('../src/templates/package-template');
 
 const showHelp = () => {
     console.log(`Ello, my name's Dinkin! What would you like to do?`);
@@ -68,31 +68,59 @@ const getAppName = () => {
 const setupApplication = async (appName) => {
 	const projectName = appName.split(' ').join('-');
 
-	try {
-		await fsPromise.mkdir(`./${projectName}`, { recursive: true })
-	} catch (error) {
-		console.error('There was an issue setting up your application.');
-		throw error;
-	}
+	exec(`mkdir ${projectName} && cd ${projectName} && npm init -f`,  (initErr, initStdout, initStderr) => {
+			if(initErr) {
+				console.error('There was an issue initializing your application:', initErr);
+				return;
+			} 
 
-	const packageData = createPackageJson(projectName);
-	try {
-		await fsPromise.writeFile(`./${projectName}/package.json`, packageData, { flag: 'w+', encoding: 'utf8' });
-	} catch (error) {
-		console.error('There was an issue setting up the package.json file.');
-		throw error;
-	}
+			fs.readFile(`${projectName}/package.json`)
+				.then((data) => {
+					console.log(data.toString());
+					const result = JSON.parse(data);
+					result['scripts'] = packageJsonTemplate.scripts;
+					return result;
+				})
+				.then((data) => {
+					return fs.writeFile(`${projectName}/package.json`, JSON.stringify(data, null, 4));
+				})
+				.catch((err) => {
+					console.error(err);
+					return;
+				});
 
-	try {
-		const scaffoldFiles = await fsPromise.readdir(`${__dirname}/scaffold`);
+			console.log(`${projectName} initialized!`);
+
+			const { dependencies, devDependencies } = packageJsonTemplate;
+			const deps = Object.keys(dependencies).join(' ');
+			const devDeps = Object.keys(devDependencies).join(' ');
 		
-		// await Promise.all(files.map(async (file) => {
-		// 	const contents = await fs.readFile(file, 'utf8')
-		// 	console.log('--CONTENTS--', contents)
-		// }));
-		// await fsPromise.cp(`./${projectName}`, )
+			console.log('installing dependencies...');
 
-		copyDir(`${__dirname}/scaffold`, `./${projectName}`);
+			// exec(`cd ${projectName} && npm install -D ${devDeps} && npm i -S ${deps}`, (npmErr, npmStdout, npmStderr) => { 
+			// 	if(npmErr) {
+			// 		console.error('There was an issue installing dependencies:', npmErr);
+			// 		return;
+			// 	} 
+			// 	// TODO: add a loading spinner here
+			// 	console.log('dependencies installed!');
+			// });
+		});
+
+	// console.log('what is this', );
+	// await fs.readdir(`${__dirname}/../src/scaffold`).then((data) => {
+	// 	console.log('data', data);
+	// });
+		
+	// await Promise.all(files.map(async (file) => {
+	// 	const contents = await fs.readFile(file, 'utf8')
+	// 	console.log('--CONTENTS--', contents)
+	// }));
+
+	// await fs.cp(`./${projectName}`, scaffoldFiles)
+	
+	try {
+		copyDir(`${__dirname}/../src/scaffold`, `./${projectName}/`);
 	} catch (error) {
 		throw error;
 	}
@@ -111,14 +139,15 @@ const getComponentName = () => {
 };
 
 const createPackageJson = (appName) => {
-	const template = packageJSONTemplate;
+	const template = packageJsonTemplate;
 	template.name = appName;
 	return JSON.stringify(template, null, 4);
 };
 
 const copyDir = async (src, dest) => {
-    await fsPromise.mkdir(dest, { recursive: true });
-    let entries = await fsPromise.readdir(src, { withFileTypes: true });
+    // await fs.mkdir(dest, { recursive: true });
+	// console.log('')
+    let entries = await fs.readdir(src, { withFileTypes: true });
 
     for (let entry of entries) {
         let srcPath = path.join(src, entry.name);
@@ -126,7 +155,7 @@ const copyDir = async (src, dest) => {
 
         entry.isDirectory() ?
             await copyDir(srcPath, destPath) :
-            await fsPromise.copyFile(srcPath, destPath);
+            await fs.copyFile(srcPath, destPath);
     }
 }
 
