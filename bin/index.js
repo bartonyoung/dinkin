@@ -1,11 +1,10 @@
 #! /usr/bin/env node
 const yargs = require('yargs');
-const utils = require('./utils');
+const process = require('process');
 const inquirer = require('inquirer');
 const fse =  require('fs-extra');
-const path = require('path');
 const { exec } = require('child_process');
-const packageJsonTemplate = require('../src/templates/package-template');
+const packageJsonTemplate = require('../templates/package-template');
 
 if (!yargs.argv._[0]) {
     promptWithQuestions();
@@ -18,12 +17,12 @@ if (!yargs.argv._[0]) {
 //       .help(true)  
 //       .argv;
 
-function showHelp() {
-    console.log(`Ello, my name's Dinkin! What would you like to do?`);
-    console.log('\tCreate a new project\r');
-    console.log('\tGenerate a new React component\r');
-    console.log('\tShow available commands\r');
-};
+// function showHelp() {
+//     console.log(`Ello, my name's Dinkin! What would you like to do?`);
+//     console.log('\tCreate a new project\r');
+//     console.log('\tGenerate a new React component\r');
+//     console.log('\tShow available commands\r');
+// };
 
 function promptWithQuestions() {
     inquirer
@@ -45,7 +44,7 @@ function promptWithQuestions() {
 					createApp();
 					break;
 				case 'create component':
-					getComponentName();
+					promptComponent();
 					break;
 				default:
 					console.error(`Please make a valid selection.`);
@@ -56,8 +55,57 @@ function promptWithQuestions() {
 		});
 };
 
+async function promptComponent() {
+	const componentName = await getComponentName();
+	const addToExistingDirectory = await shouldAddToDirectory();
+	console.log(addToExistingDirectory);
+	if (addToExistingDirectory) {
+		const componentDirectoryName = await getComponentDirectoryName();
+		createComponent(componentName, componentDirectoryName);
+	} else {
+		createComponent(componentName);
+	}
+	// inquirer
+	// 	.prompt([
+	// 		{ 	
+	// 			name: 'component',
+	// 			type: 'input',
+	// 			message: `What is the name of the component?`
+	// 		}
+	// 	])
+		// .then(({ component }) => {
+			// await addToDirectoryPrompt();
+			// inquirer
+			// 	.prompt([
+			// 		{ 	
+			// 			name: 'addToExistingDirectory',
+			// 			type: 'confirm',
+			// 			message: `Should the component live in an existing component sub-directory?`
+			// 		}
+			// 	])
+		// })
+		// .then(({ addToExistingDirectory }) => {
+		// 	let parentDirectory;
+			// if (addToExistingDirectory) {
+			// 	inquirer
+			// 		.prompt([
+			// 			{
+			// 				name: 'parentDirectory',
+			// 				type: 'input',
+			// 				message: 'Enter the component\'s parent directory.'
+			// 			}
+			// 		])
+			// 		.then(({ parentDir }) => {
+			// 			parentDirectory = parentDir 
+			// 		})
+			// } else {
+				
+			// }
+		// });
+};
+
 function createApp() {
-	return inquirer
+	inquirer
 		.prompt({
 			type: 'input',
 			name: 'app_name',
@@ -71,7 +119,7 @@ function createApp() {
 			}
 		})
 		.then((answer)=> {
-			return setupApplication(answer.app_name);
+			setupApplication(answer.app_name);
 		})
         .catch((err) => { 
             console.error('Something went wrong. Aborting.:', err);
@@ -102,13 +150,10 @@ async function setupApplication(appName) {
 			.then((data) => {
 				const result = JSON.parse(data);
 				result['scripts'] = packageJsonTemplate.scripts;
-				return result;
-			})
-			.then((data) => {
-				return fse.writeFile(`${projectName}/package.json`, JSON.stringify(data, null, 4));
+				return fse.writeFile(`${projectName}/package.json`, JSON.stringify(result, null, 4));
 			})
 			.catch((err) => {
-				console.error(err);
+				console.error('There was an error creating the package.json file:', err);
 				removeDirectory();
 			});
 
@@ -120,8 +165,7 @@ async function setupApplication(appName) {
 	
 		console.log('installing dependencies...');
 
-		// exec(`cd ${projectName} && npm install -D ${devDeps} && npm i -S ${deps}`, async (npmErr) => { 
-		exec(`cd ${projectName}`, async (npmErr) => { 
+		exec(`cd ${projectName} && npm install -D ${devDeps} && npm i -S ${deps}`, async (npmErr) => {
 			if(npmErr) {
 				console.error('There was an issue installing dependencies:', npmErr);
 				removeDirectory();
@@ -130,7 +174,7 @@ async function setupApplication(appName) {
 			console.log('dependencies installed!');
 			console.log('copying additional files...');
 
-			await fse.copy(`${__dirname}/../src/scaffold`, `./${projectName}`, { filter: (srcFile) => !srcFile.includes('.git') })
+			await fse.copy(`${__dirname}/../scaffold`, `./${projectName}`, { filter: (srcFile) => !srcFile.includes('.git') })
 				.then(() => console.log(`success! ${projectName} is ready to go!`))
 				.catch((err) => {
 					console.error('There was an issue copying the required files:', err);
@@ -140,16 +184,56 @@ async function setupApplication(appName) {
 	});
 };
 
-function getComponentName() {
-	return inquirer
-		.prompt({
-			type: 'input',
-			name: 'component_name',
-			message: 'What is the name of the component?'
-		})
-		.then((answer)=> {
-			console.log(`...creating a component named ${answer.component_name}`);
-		});
+function createComponent(componentName, parentDirectory) {
+	parentDirectory ? console.log(`${parentDirectory} ---->`, componentName) : console.log('no parent directory');
+	exec(`pwd`, (locationCheckErr, location) => {
+		if (locationCheckErr) {
+			console.log('There was an error creating your component.');
+			return;
+		}
+		
+		// TODO:
+		// confirm that the current directory contains a "components" directory
+		// if passed a parentDirectory, search for that directory or create it
+		console.log('current location--->', process.cwd())
+		fse.readdir(process.cwd())
+			.then((files) => console.log(files))
+			.catch((err) => console.error('There was an error', err))
+	});
 };
 
-module.exports = { showHelp, promptWithQuestions };
+function shouldAddToDirectory() {
+	return inquirer
+		.prompt([
+			{ 	
+				name: 'addToExistingDirectory',
+				type: 'confirm',
+				message: `Should the component live in an existing component sub-directory?`
+			}
+		])
+		.then(( { addToExistingDirectory }) => addToExistingDirectory);
+}
+
+function getComponentName() {
+	return inquirer
+		.prompt([
+			{ 	
+				name: 'component',
+				type: 'input',
+				message: `What is the name of the component?`
+			}
+		])
+		.then(( { component }) => component);
+}; 
+
+function getComponentDirectoryName() {
+	return inquirer
+		.prompt([
+			{
+				name: 'directoryName',
+				type: 'input',
+				message: 'Enter the name of an existing component directory'
+			}
+		])
+		.then(( { directoryName }) => directoryName);
+}
