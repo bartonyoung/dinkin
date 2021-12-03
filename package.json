@@ -12,6 +12,7 @@
   "author": "Barton Young",
   "license": "ISC",
   "dependencies": {
+    "fs-extra": "^10.0.0",
     "inquirer": "^8.2.0",
     "yargs": "^17.2.1"
   }
