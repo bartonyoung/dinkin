@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
-const yargs = require('yargs');
+const { program } = require('commander');
 const process = require('process');
 const { pascalCase } = require('pascal-case');
 const inquirer = require('inquirer');
@@ -9,20 +9,6 @@ const path = require('path');
 const { exec } = require('child_process');
 const packageJsonTemplate = require('../templates/package-template.json');
 const componentTemplate = require('../templates/component-template');
-
-// const usage = "\nUsage: dink --create <my-application-name> to start a new React project";
-// const options = yargs
-//       .usage(usage)
-//       .option("c", { alias:"create", describe: "Create a basic React app with Typescript and TailwindCSS.", type: "boolean", demandOption: false })
-//       .help(true)
-//       .argv;
-
-// function showHelp() {
-//     console.log(`Ello, my name's Dinkin! What would you like to do?`);
-//     console.log('\tCreate a new project\r');
-//     console.log('\tGenerate a new React component\r');
-//     console.log('\tShow available commands\r');
-// };
 
 /**
  * @param appName
@@ -89,12 +75,12 @@ function shouldAddToDirectory() {
   return inquirer
     .prompt([
       {
-        name: 'addToExistingDirectory',
+        name: 'addToSubdirectory',
         type: 'confirm',
-        message: 'Should the component live in an existing component sub-directory?',
+        message: 'Should the component live in a component sub-directory?',
       },
     ])
-    .then(({ addToExistingDirectory }) => addToExistingDirectory);
+    .then(({ addToSubdirectory }) => addToSubdirectory);
 }
 
 function getComponentName() {
@@ -106,7 +92,7 @@ function getComponentName() {
         message: 'What is the name of the component?',
       },
     ])
-    .then(({ component }) => component);
+    .then(({ component }) => component.toLowerCase().split(' ').join('-'));
 }
 
 function getComponentDirectoryName() {
@@ -118,7 +104,7 @@ function getComponentDirectoryName() {
         message: 'Enter the name of an existing component directory',
       },
     ])
-    .then(({ directoryName }) => directoryName);
+    .then(({ directoryName }) => directoryName.toLowerCase().split(' ').join('-'));
 }
 
 /**
@@ -149,7 +135,7 @@ async function findComponentDirectory(location) {
   return folders.filter(Boolean).flat();
 }
 
-async function addComponentToSubDirectory(componentToMake, componentSubDirectory) {
+async function addComponent(componentToMake, componentSubDirectory) {
   const subDirectoryExists = await fse.pathExists(componentSubDirectory)
     .then((exists) => exists)
     .catch((err) => console.error(err));
@@ -173,21 +159,23 @@ async function addComponentToSubDirectory(componentToMake, componentSubDirectory
  * @param componentSubDirectory
  */
 async function createComponentDirectory(componentName, componentSubDirectory) {
-  const [existingComponentDir] = await findComponentDirectory(process.cwd());
+  const [defaultComponentDir] = await findComponentDirectory(process.cwd());
 
-  if (!existingComponentDir) {
-    console.error('A "components" directory is required to create a new component.');
+  if (!defaultComponentDir) {
+    console.error('A "components" directory is required to create a new component. Please operate Dinkin\' from the root of your proect.');
     return;
   }
 
   if (componentSubDirectory) {
-    const subDirectory = await (path.join(existingComponentDir, componentSubDirectory));
-    await addComponentToSubDirectory(componentName, subDirectory);
+    const subDirectory = await (path.join(defaultComponentDir, componentSubDirectory));
+    await addComponent(componentName, subDirectory);
+  } else {
+    await addComponent(componentName, defaultComponentDir);
   }
 }
 
 async function promptComponent() {
-  const componentName = (await getComponentName()).toLowerCase().split(' ').join('-');
+  const componentName = await getComponentName();
   const addToExistingDirectory = await shouldAddToDirectory();
 
   if (addToExistingDirectory) {
@@ -221,7 +209,7 @@ function createApp() {
     });
 }
 
-function promptWithQuestions() {
+function goInteractive() {
   inquirer
     .prompt([
       {
@@ -252,6 +240,36 @@ function promptWithQuestions() {
     });
 }
 
-if (!yargs.argv._[0]) {
-  promptWithQuestions();
+program
+  .option('-gfc, generate-function-component <componentName>', 'Generate a React function component')
+  .option('-subdir, subdirectory <subDirectory>', 'Add React component to a component subdirectory');
+
+// program
+//   .command('generate-function-component <componentName>')
+//   .alias('gfc')
+//   .description('Generate a React function component')
+//   .option('-subdir, --sub_directory <subDirectory>', 'Subdirectory where the new component will live')
+//   .action((componentName, options) => {
+//     console.log(`...creating ${componentName} ${options?.sub_directory ? `within components/${options.sub_directory}` : ''}`);
+//     createComponentDirectory(componentName, options?.sub_directory);
+//   });
+
+// program
+//   .command('scaffold <applicationName>')
+//   .action((applicationName) => {
+//     setupApplication(applicationName);
+//   });
+
+// program.addHelpText('after');
+
+program.parse(process.argv);
+
+const options = program.opts();
+
+// console.log(options);
+if (options.generateFunctionComponent) {
+  // goInteractive();
+  createComponentDirectory(options.generateFunctionComponent, options.subDirectory);
+} else {
+  goInteractive();
 }
