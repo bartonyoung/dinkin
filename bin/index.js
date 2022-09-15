@@ -2,6 +2,8 @@
 /* eslint-disable no-console */
 const { program } = require('commander');
 const process = require('process');
+const std = process.stdout;
+const rdl = require('readline');
 const { pascalCase } = require('pascal-case');
 const inquirer = require('inquirer');
 const fse = require('fs-extra');
@@ -31,11 +33,15 @@ async function setupApplication(appName) {
       return;
     }
 
-    fse.readFile(`${projectName}/package.json`)
+    fse
+      .readFile(`${projectName}/package.json`)
       .then((data) => {
         const result = JSON.parse(data);
+        const { scripts, dependencies, devDependencies } = packageJsonTemplate;
+        result.scripts = scripts;
+        result.dependencies = dependencies;
+        result.devDependencies = devDependencies;
 
-        result.scripts = packageJsonTemplate.scripts;
         return fse.writeFile(`${projectName}/package.json`, JSON.stringify(result, null, 4));
       })
       .catch((err) => {
@@ -45,23 +51,22 @@ async function setupApplication(appName) {
 
     console.log(`${projectName} initialized!`);
 
-    const { dependencies, devDependencies } = packageJsonTemplate;
-    const deps = Object.keys(dependencies).join(' ');
-    const devDeps = Object.keys(devDependencies).join(' ');
+    const loading = load();
 
-    console.log('installing dependencies...');
-
-    exec(`cd ${projectName} && npm install -D ${devDeps} && npm i -S ${deps}`, async (npmErr) => {
+    exec(`cd ${projectName} && npm install`, async (npmErr) => {
       if (npmErr) {
         console.error('There was an issue installing dependencies:', npmErr);
         removeDirectory();
       }
 
-      // TODO: add a loading spinner here
+      clearInterval(loading);
       console.log('dependencies installed!');
       console.log('copying additional files...');
 
-      await fse.copy(`${__dirname}/../scaffold`, `./${projectName}`, { filter: (srcFile) => !srcFile.includes('.git') })
+      await fse
+        .copy(`${__dirname}/../scaffold`, `./${projectName}`, {
+          filter: (srcFile) => !srcFile.includes('.git'),
+        })
         .then(() => console.log(`success! ${projectName} is ready to go!`))
         .catch((err) => {
           console.error('There was an issue copying the required files:', err);
@@ -117,40 +122,49 @@ async function findComponentDirectory(location) {
     return [];
   }
 
-  const folders = await Promise.all(dirents.map((dirent) => {
-    if (!dirent.name.includes('node_modules')) {
-      const res = path.resolve(location, dirent.name);
+  const folders = await Promise.all(
+    dirents.map((dirent) => {
+      if (!dirent.name.includes('node_modules')) {
+        const res = path.resolve(location, dirent.name);
 
-      if (dirent.name.toLowerCase() === 'components') {
-        return res;
-      }
+        if (dirent.name.toLowerCase() === 'components') {
+          return res;
+        }
 
-      if (dirent.isDirectory()) {
-        return findComponentDirectory(res);
+        if (dirent.isDirectory()) {
+          return findComponentDirectory(res);
+        }
       }
-    }
-    return [];
-  }));
+      return [];
+    })
+  );
 
   return folders.filter(Boolean).flat();
 }
 
 async function addComponent(componentToMake, componentSubDirectory) {
-  const subDirectoryExists = await fse.pathExists(componentSubDirectory)
+  const subDirectoryExists = await fse
+    .pathExists(componentSubDirectory)
     .then((exists) => exists)
     .catch((err) => console.error(err));
 
   const componentPath = path.join(componentSubDirectory, componentToMake);
   if (subDirectoryExists) {
-    await fse.mkdir(componentPath)
+    await fse
+      .mkdir(componentPath)
       .then(() => console.log('Component Directory Created'))
       .catch((err) => console.error('Directory not created:', err));
   } else {
-    await fse.mkdir(componentSubDirectory)
-      .then(() => fse.mkdir(componentPath)).catch((err) => console.error('Directory not created:', err));
+    await fse
+      .mkdir(componentSubDirectory)
+      .then(() => fse.mkdir(componentPath))
+      .catch((err) => console.error('Directory not created:', err));
   }
 
-  const updatedComponentTemplate = componentTemplate.replace(/COMPONENT_NAME/gi, pascalCase(componentToMake));
+  const updatedComponentTemplate = componentTemplate.replace(
+    /COMPONENT_NAME/gi,
+    pascalCase(componentToMake)
+  );
   await fse.writeFile(`${path.join(componentPath, componentToMake)}.tsx`, updatedComponentTemplate);
 }
 
@@ -162,12 +176,14 @@ async function createComponentDirectory(componentName, componentSubDirectory) {
   const [defaultComponentDir] = await findComponentDirectory(process.cwd());
 
   if (!defaultComponentDir) {
-    console.error('A "components" directory is required to create a new component. Please operate Dinkin\' from the root of your proect.');
+    console.error(
+      'A "components" directory is required to create a new component. Please operate Dinkin\' from the root of your proect.'
+    );
     return;
   }
 
   if (componentSubDirectory) {
-    const subDirectory = await (path.join(defaultComponentDir, componentSubDirectory));
+    const subDirectory = await path.join(defaultComponentDir, componentSubDirectory);
     await addComponent(componentName, subDirectory);
   } else {
     await addComponent(componentName, defaultComponentDir);
@@ -179,7 +195,10 @@ async function promptComponent() {
   const addToExistingDirectory = await shouldAddToDirectory();
 
   if (addToExistingDirectory) {
-    const componentDirectoryName = (await getComponentDirectoryName()).toLowerCase().split(' ').join('-');
+    const componentDirectoryName = (await getComponentDirectoryName())
+      .toLowerCase()
+      .split(' ')
+      .join('-');
 
     createComponentDirectory(componentName, componentDirectoryName);
   } else {
@@ -241,8 +260,14 @@ function goInteractive() {
 }
 
 program
-  .option('-gfc, generate-function-component <componentName>', 'Generate a React function component')
-  .option('-subdir, subdirectory <subDirectory>', 'Add React component to a component subdirectory');
+  .option(
+    '-gfc, generate-function-component <componentName>',
+    'Generate a React function component'
+  )
+  .option(
+    '-subdir, subdirectory <subDirectory>',
+    'Add React component to a component subdirectory'
+  );
 
 // program
 //   .command('generate-function-component <componentName>')
@@ -272,4 +297,18 @@ if (options.generateFunctionComponent) {
   createComponentDirectory(options.generateFunctionComponent, options.subDirectory);
 } else {
   goInteractive();
+}
+
+function load() {
+  const loadingSteps = ['-', '\\', '|', '/'];
+  let index = 0;
+
+  std.write('\x1b[?25l');
+  return setInterval(() => {
+    const currentStep = loadingSteps[index];
+
+    std.write(`${currentStep} installing dependencies... this may take a minute`);
+    rdl.cursorTo(std, 0);
+    index = index === 3 ? 0 : index + 1;
+  }, 100);
 }
